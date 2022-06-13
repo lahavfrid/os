@@ -13,14 +13,16 @@ typedef struct node_t
 typedef struct list_t
 {
     int size;
+    int max_size;
     Node head;
     Node tail;
 } *List;
 
-List list_init()
+List list_init(int given_max_size)
 {
     List list;
     list->size = 0;
+    list->max_size = given_max_size;
     list->head = NULL;
     list->tail = NULL;
     return list;
@@ -49,22 +51,22 @@ void list_push_back(List list, int fd)
     return;
 }
 
-int remove(List list, int fd)
+int list_remove(List list, int fd)
 {
     Node temp = list->head;
     while (temp != NULL)
     {
-        if (temp->fd = fd)
+        if (temp->fd == fd)
         {
             if (temp == list->tail)
             {
-                list->tail == list->tail->prev;
+                list->tail = list->tail->prev;
             }
             Node prev = temp->prev;
             Node next = temp->next;
             prev->next = next;
             next->prev = prev;
-            size--;
+            list->size--;
             free(temp);
             return 0;
         }
@@ -85,13 +87,13 @@ int list_pop(List list)
     {
         list->head = NULL;
         list->size--;
-        return fd;
+        return ret_value;
     }
     list->head = list->head->next;
     list->head->prev = NULL;
     free(temp);
     list->size--;
-    return fd;
+    return ret_value;
 }
 
 #endif
