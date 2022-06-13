@@ -1,6 +1,7 @@
 #include "segel.h"
 #include "request.h"
 #include "list.h"
+#include <assert.h>
 
 // 
 // server.c: A very, very simple web server
@@ -13,8 +14,7 @@
 //
 
 pthread_mutex_t mutex;
-pthread_cond_t available_job;
-pthread_cond_t available_queue;
+pthread_cond_t available_cond;
 
 // HW3: Parse the new arguments too
 void getargs(int *port, int argc, char *argv[], int* thread_num, int* queue_size, char* policy)
@@ -31,42 +31,51 @@ void getargs(int *port, int argc, char *argv[], int* thread_num, int* queue_size
 }
 
 
-void* worker_thread(void* given_queue)
+void* worker_thread(void* arg)
 {
     int current_request = -1;
 
+    //printf("enter worker\n");
+    List* list_array = (List*)arg;
+    List input_queue = (List)list_array[0];
+    List threads_queue = (List)list_array[1];
+    
     pthread_mutex_lock(&mutex);
-    List input_queue = (List)given_queue;
     while(1)    //let the worker threads continue working
     {
+        //printf("enter while %d\n", current_request);
         while(current_request == -1)
         {
-            pthread_cond_wait(&available_job, &mutex);
-            current_request = list_pop(input_queue);
+            //printf("enter current request\n");
+            pthread_cond_wait(&available_cond, &mutex);
+            //printf("Got to cond_wait\n");
+            assert(input_queue != NULL);
+
+            suseconds_t creation = 0;
+            current_request = list_pop(input_queue, &creation);
+            list_push_back(threads_queue, current_request, creation);
         }
         pthread_mutex_unlock(&mutex);
 
         requestHandle(current_request);
         Close(current_request);
 
-        current_request = -1;
         pthread_mutex_lock(&mutex);
+        //printf("Got to loop's end\n");
+        list_remove(threads_queue, current_request);    //maybe need to remove by getting the node earlier, and not searching in the queue
+        current_request = -1;
+
         if(input_queue->max_size > input_queue->size)
-            pthread_cond_signal(&available_queue);
+            pthread_cond_signal(&available_cond);
     }
     pthread_mutex_unlock(&mutex);   //oi vey, shouldn't reach here
 }
 
 int main(int argc, char *argv[])
 {
-    printf("sanity\n");
+    //printf("sanity\n");
     pthread_mutex_init(&mutex, NULL);   //is this needed?
-    if(pthread_cond_init(&available_job, NULL) != 0)
-    {
-        perror("Condition Variable initializtion failed");
-        return -1;  //may have better error signal
-    }
-    if(pthread_cond_init(&available_queue, NULL) != 0)
+    if(pthread_cond_init(&available_cond, NULL) != 0)
     {
         perror("Condition Variable initializtion failed");
         return -1;  //may have better error signal
@@ -77,44 +86,69 @@ int main(int argc, char *argv[])
     char* policy;
 
     getargs(&port, argc, argv, &thread_num, &queue_max_size, policy);
-    printf("port: %d\n", port);
+    //printf("port: %d\n", port);
 
-    // 
-    // HW3: Create some threads...
-    //
-
+    //printf("before list creation\n");
     List input_queue = list_init(queue_max_size);
+    List threads_queue = list_init(queue_max_size);
+    List list_array[2];
+    list_array[0] = input_queue;
+    list_array[1] = threads_queue;
 
+    //printf("created list\n");
     pthread_t* thread_array[thread_num];
+    //printf("created thread array\n");
     for(int i=0; i<thread_num; i++)
     {
-        pthread_create(thread_array[i], NULL, &worker_thread, input_queue);
+        //printf("for %d iteration\n", i);
+        thread_array[i] = (pthread_t)malloc(sizeof(pthread_t));
+        pthread_create(thread_array[i], NULL, &worker_thread, list_array);
+        assert(thread_array[i] != NULL);
+        //printf("created %d thread\n", i);
     }
-
+    //printf("after threads creation\n");
 
     
     listenfd = Open_listenfd(port);
-    printf("listenfd: %d\n", listenfd);
+    //printf("listenfd: %d\n", listenfd);
     while (1) {
-	clientlen = sizeof(clientaddr);
-	connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
-    printf("connfd: %d\n", connfd);
+        clientlen = sizeof(clientaddr);
+        connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
+        //printf("connfd: %d\n", connfd);
 
-    pthread_mutex_lock(&mutex);
-    if(input_queue->size < queue_max_size){
-      list_push_back(input_queue, connfd);
-    }
-    else
-    {
-        while(queue_max_size <= input_queue->size)
-        {
-            pthread_cond_wait(&available_queue, &mutex);
+        pthread_mutex_lock(&mutex);
+        if(input_queue->size < queue_max_size){
+            list_push_back(input_queue, connfd, 0);
         }
-      //HANDLE ACCORDING TO policy
-    }
+        else
+        {
+            if(strcmp(policy, "drop_tail") == 0)
+            {
+                Close(connfd);
+            }
+            else if(strcmp(policy, "drop_random") == 0)
+            {
+                list_random_delete(input_queue);
+                list_push_back(input_queue, connfd, 0);
+            }
+            else if(strcmp(policy, "drop_head") == 0)
+            {
+                Close(list_pop(input_queue, NULL));
+                list_push_back(input_queue, connfd, 0);
+            }
+            else    //policy == "block"
+            {
+                while(queue_max_size <= input_queue->size)
+                {
+                    pthread_cond_wait(&available_cond, &mutex);
+                }
+                list_push_back(input_queue, connfd, 0);
+            }
+        }
 
-    pthread_cond_signal(&available_job);
-    pthread_mutex_unlock(&mutex);
+        if(input_queue->size > 0)
+            pthread_cond_signal(&available_cond);
+        pthread_mutex_unlock(&mutex);
     }
 }
 
