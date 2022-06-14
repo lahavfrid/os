@@ -73,12 +73,15 @@ void* worker_thread(void* arg)
         requestHandle(current_request, &creation, &working, &stats); //added creation time, working time, stats
         Close(current_request);
 
+        //printf("Stats: total: %d, static: %d, dynamic:%d\n", stats.total_requests, stats.static_requests, stats.dynamic_requests);
+
         pthread_mutex_lock(&mutex);
         //printf("Got to loop's end\n");
         list_remove(threads_queue, current_request);    //maybe need to remove by getting the node earlier, and not searching in the queue
+        //printf("list_remove result: %d\n", remove);
         current_request = -1;
 
-        if(input_queue->max_size > input_queue->size)
+        if(input_queue->max_size > input_queue->size + threads_queue->size)
             pthread_cond_signal(&available_cond);
     }
     pthread_mutex_unlock(&mutex);   //oi vey, shouldn't reach here
@@ -96,7 +99,7 @@ int main(int argc, char *argv[])
 
     int listenfd, connfd, port, clientlen, thread_num, queue_max_size;
     struct sockaddr_in clientaddr;
-    char* policy;
+    char* policy = NULL;
 
     getargs(&port, argc, argv, &thread_num, &queue_max_size, policy);
     //printf("port: %d\n", port);
@@ -115,7 +118,7 @@ int main(int argc, char *argv[])
     {
         list_push_back(input_queue, i);   //giving id to each thread
         //printf("for %d iteration\n", i);
-        thread_array[i] = (pthread_t)malloc(sizeof(pthread_t));
+        thread_array[i] = (pthread_t*)malloc(sizeof(pthread_t));
         pthread_create(thread_array[i], NULL, &worker_thread, list_array);
         assert(thread_array[i] != NULL);
         //printf("created %d thread\n", i);
@@ -131,7 +134,7 @@ int main(int argc, char *argv[])
         //printf("connfd: %d\n", connfd);
 
         pthread_mutex_lock(&mutex);
-        if(input_queue->size < queue_max_size){
+        if(input_queue->size + threads_queue->size < queue_max_size){
             list_push_back(input_queue, connfd);
         }
         else
@@ -147,12 +150,16 @@ int main(int argc, char *argv[])
             }
             else if(strcmp(policy, "drop_head") == 0)
             {
-                Close(list_pop(input_queue, NULL));
+                int pop_return = list_pop(input_queue, NULL);
+                if(pop_return >= 0)
+                    Close(pop_return);
+                else
+                    Close(connfd);
                 list_push_back(input_queue, connfd);
             }
             else    //policy == "block"
             {
-                while(queue_max_size <= input_queue->size)
+                while(queue_max_size <= input_queue->size + threads_queue->size)
                 {
                     pthread_cond_wait(&available_cond, &mutex);
                 }
@@ -164,6 +171,7 @@ int main(int argc, char *argv[])
             pthread_cond_signal(&available_cond);
         pthread_mutex_unlock(&mutex);
     }
+    printf("HOLY SHIT HOW DID WE GET HERE");
 }
 
 

@@ -61,6 +61,33 @@ void list_push_back(List list, int fd)
     return;
 }
 
+int list_pop(List list, struct timeval* creation)
+{
+    if (list == NULL)
+        return -1;
+    if (list->head == NULL)
+        return -1;
+    int ret_value = list->head->fd;
+    if(creation != NULL)
+    {
+        creation->tv_sec = list->head->creation_time.tv_sec;
+        creation->tv_usec = list->head->creation_time.tv_usec;
+    }
+    
+    Node temp = list->head;
+    if (list->head->next == NULL)
+    {
+        list->head = NULL;
+        list->size--;
+        return ret_value;
+    }
+    list->head = list->head->next;
+    list->head->prev = NULL;
+    free(temp);
+    list->size--;
+    return ret_value;
+}
+
 int list_remove(List list, int fd)
 {
     if(list==NULL || list->head==NULL)
@@ -90,33 +117,6 @@ int list_remove(List list, int fd)
         temp = temp->next;
     }
     return 1;
-}
-
-int list_pop(List list, struct timeval* creation)
-{
-    if (list == NULL)
-        return -1;
-    if (list->head == NULL)
-        return -1;
-    int ret_value = list->head->fd;
-    if(creation != NULL)
-    {
-        creation->tv_sec = list->head->creation_time.tv_sec;
-        creation->tv_usec = list->head->creation_time.tv_usec;
-    }
-    
-    Node temp = list->head;
-    if (list->head->next == NULL)
-    {
-        list->head = NULL;
-        list->size--;
-        return ret_value;
-    }
-    list->head = list->head->next;
-    list->head->prev = NULL;
-    free(temp);
-    list->size--;
-    return ret_value;
 }
 
 void list_random_delete(List list)
