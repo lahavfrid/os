@@ -39,7 +39,17 @@ void* worker_thread(void* arg)
     List* list_array = (List*)arg;
     List input_queue = (List)list_array[0];
     List threads_queue = (List)list_array[1];
+
+    int id = list_pop(input_queue, NULL);   //getting the thread id
     
+    struct timeval creation;    //stats declaration
+    struct timeval working;
+    struct Satistics stats;
+    stats.id = id;
+    stats.total_requests = 0;
+    stats.static_requests = 0;
+    stats.dynamic_requests = 0;
+
     pthread_mutex_lock(&mutex);
     while(1)    //let the worker threads continue working
     {
@@ -51,13 +61,16 @@ void* worker_thread(void* arg)
             //printf("Got to cond_wait\n");
             assert(input_queue != NULL);
 
-            suseconds_t creation = 0;
             current_request = list_pop(input_queue, &creation);
-            list_push_back(threads_queue, current_request, creation);
+
+            gettimeofday(&working, NULL);
+            list_push_back(threads_queue, current_request);
         }
         pthread_mutex_unlock(&mutex);
 
-        requestHandle(current_request);
+        stats.total_requests++;
+
+        requestHandle(current_request, &creation, &working, &stats); //added creation time, working time, stats
         Close(current_request);
 
         pthread_mutex_lock(&mutex);
@@ -100,6 +113,7 @@ int main(int argc, char *argv[])
     //printf("created thread array\n");
     for(int i=0; i<thread_num; i++)
     {
+        list_push_back(input_queue, i);   //giving id to each thread
         //printf("for %d iteration\n", i);
         thread_array[i] = (pthread_t)malloc(sizeof(pthread_t));
         pthread_create(thread_array[i], NULL, &worker_thread, list_array);
@@ -118,7 +132,7 @@ int main(int argc, char *argv[])
 
         pthread_mutex_lock(&mutex);
         if(input_queue->size < queue_max_size){
-            list_push_back(input_queue, connfd, 0);
+            list_push_back(input_queue, connfd);
         }
         else
         {
@@ -129,12 +143,12 @@ int main(int argc, char *argv[])
             else if(strcmp(policy, "drop_random") == 0)
             {
                 list_random_delete(input_queue);
-                list_push_back(input_queue, connfd, 0);
+                list_push_back(input_queue, connfd);
             }
             else if(strcmp(policy, "drop_head") == 0)
             {
                 Close(list_pop(input_queue, NULL));
-                list_push_back(input_queue, connfd, 0);
+                list_push_back(input_queue, connfd);
             }
             else    //policy == "block"
             {
@@ -142,7 +156,7 @@ int main(int argc, char *argv[])
                 {
                     pthread_cond_wait(&available_cond, &mutex);
                 }
-                list_push_back(input_queue, connfd, 0);
+                list_push_back(input_queue, connfd);
             }
         }
 

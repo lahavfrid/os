@@ -3,12 +3,12 @@
 #define LIST_H_
 #include <stdlib.h>
 #include <sys/time.h>
+#include "segel.h"
 
 typedef struct node_t
 {
     int fd;
-    suseconds_t creation_time;
-    suseconds_t working_time;
+    struct timeval creation_time;
     struct node_t* next;
     struct node_t* prev;
 } *Node;
@@ -31,35 +31,29 @@ List list_init(int given_max_size)
     return list;
 }
 
-void list_push_back(List list, int fd, suseconds_t creation)
+void list_push_back(List list, int fd)
 {
     if (list == NULL)
         return;
 
     struct timeval current;
-    suseconds_t working = 0;
+    Node new_node = malloc(sizeof(struct node_t));
     gettimeofday(&current, NULL);
-    if(creation == 0)
-        creation = current.tv_usec;
-    else
-        working = current.tv_usec;
+    new_node->creation_time.tv_usec = current.tv_usec;
+    new_node->creation_time.tv_sec = current.tv_sec;
     
     if (list->head == NULL)
     {
-        list->head = malloc(sizeof(struct node_t));
+        list->head = new_node;
         list->head->prev = NULL;
         list->head->fd = fd;
-        list->head->creation_time = creation;
-        list->head->working_time = working;
         list->head->next = NULL;
         list->tail = list->head;
         list->size++;
         return;
     }
-    list->tail->next = malloc(sizeof(struct node_t));
+    list->tail->next = new_node;
     list->tail->next->fd = fd;
-    list->head->creation_time = creation;
-    list->head->working_time = working;
     list->tail->next->prev = list->tail->next;
     list->tail = list->tail->next;
     list->tail->next = NULL;
@@ -98,7 +92,7 @@ int list_remove(List list, int fd)
     return 1;
 }
 
-int list_pop(List list, suseconds_t* creation)
+int list_pop(List list, struct timeval* creation)
 {
     if (list == NULL)
         return -1;
@@ -106,7 +100,10 @@ int list_pop(List list, suseconds_t* creation)
         return -1;
     int ret_value = list->head->fd;
     if(creation != NULL)
-        *creation = list->head->creation_time;
+    {
+        creation->tv_sec = list->head->creation_time.tv_sec;
+        creation->tv_usec = list->head->creation_time.tv_usec;
+    }
     
     Node temp = list->head;
     if (list->head->next == NULL)
@@ -134,7 +131,7 @@ void list_random_delete(List list)
     int step = rand() % step_range;
     while(step == 0 && drop_amount > 0 && list->size > 0)   //randomly remove number of first nodes
     {
-        list_pop(list, NULL);
+        Close(list_pop(list, NULL));
         drop_amount--;
         step = rand() % step_range;
     }
@@ -160,6 +157,7 @@ void list_random_delete(List list)
         prev->next = next;
         next->prev = prev;
         list->size--;
+        Close(list_iterator->fd);
         free(list_iterator);
 
         list_iterator = prev;
@@ -173,6 +171,7 @@ void list_random_delete(List list)
         prev = list_iterator->prev;
         prev->next = NULL;
         list->size--;
+        Close(list_iterator->fd);
         free(list_iterator);
 
         list_iterator = prev;
