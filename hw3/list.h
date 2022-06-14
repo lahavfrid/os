@@ -180,4 +180,42 @@ void list_random_delete(List list)
     return;
 }
 
+void list_destroy(List list)
+{
+    if(list == NULL)
+        return;
+    
+    Node list_iterator = list->head;
+    Node last = list_iterator;
+    while(list_iterator != NULL)
+    {
+        list_iterator = list_iterator->next;
+        Close(last->fd);
+        free(last);
+        last = list_iterator;
+    }
+
+    free(list);
+}
+
+/*void list_remove_by_node(List list, Node node)
+{
+    if(list == NULL || node == NULL)
+        return;
+    
+    if(list->head->fd == node->fd)
+        list->head = list->head->next;
+    if(list->tail->fd == node->fd)
+        list->tail = list->tail->prev;
+    
+    Node previous = node->prev;
+    Node after = node->next;
+    if(previous != NULL)
+        previous->next = after;
+    if(after != NULL)
+        after->prev = previous;
+    
+    free(node);
+}*/
+
 #endif

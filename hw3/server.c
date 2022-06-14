@@ -171,7 +171,16 @@ int main(int argc, char *argv[])
             pthread_cond_signal(&available_cond);
         pthread_mutex_unlock(&mutex);
     }
-    printf("HOLY SHIT HOW DID WE GET HERE");
+
+    printf("HOLY SH*T HOW DID WE GET HERE");//-------------------------------------------------
+    for(int i=0; i<thread_num; i++)
+    {
+        free(thread_array[i]);
+    }
+    free(policy);
+
+    list_destroy(input_queue);
+    list_destroy(threads_queue);
 }
 
 
