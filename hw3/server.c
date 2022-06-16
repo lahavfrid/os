@@ -9,7 +9,7 @@
 // To run:
 //  ./server <portnum (above 2000)>
 //
-// Repeatedly handles HTTP requests sent to this port number.
+// Repeatedly handles HTTP requests sent to this port number .
 // Most of the work is done within routines written in request.c
 //
 
@@ -68,10 +68,12 @@ void* worker_thread(void* arg)
         }
         
         current_request = list_pop(input_queue, &creation);
+        assert(current_request != -1);
         working_threads++;
+        
+        stats.total_requests++;
         pthread_mutex_unlock(&mutex);
 
-        stats.total_requests++;
         gettimeofday(&working, NULL);
 
         timersub(&working, &creation, &interval);   //calculate the interval between creation of the request
@@ -97,7 +99,6 @@ void* worker_thread(void* arg)
 
 int main(int argc, char *argv[])
 {
-    working_threads = 0;
     //printf("sanity\n");
     pthread_mutex_init(&mutex, NULL);   //is this needed?
     if(pthread_cond_init(&available_cond, NULL) != 0)
@@ -111,6 +112,7 @@ int main(int argc, char *argv[])
         return -1;  //may have better error signal
     }
 
+    working_threads = 0;
     int listenfd, connfd, port, clientlen, thread_num, queue_max_size;
     struct sockaddr_in clientaddr;
     char* policy = NULL;
@@ -169,12 +171,13 @@ int main(int argc, char *argv[])
             }
             else if(strcmp(policy, "dh") == 0)
             {
-                int pop_return = list_pop(input_queue, NULL);
-                if(pop_return >= 0)
-                    Close(pop_return);
+                if(input_queue->size > 0)
+                {
+                    Close(list_pop(input_queue, NULL));
+                    list_push_back(input_queue, connfd);
+                }
                 else
                     Close(connfd);
-                list_push_back(input_queue, connfd);
             }
             else    //policy == "block"
             {
@@ -186,12 +189,12 @@ int main(int argc, char *argv[])
             }
         }
 
-        //if(input_queue->size > 0)
+        if(input_queue->size > 0)
             pthread_cond_signal(&available_cond);
         pthread_mutex_unlock(&mutex);
     }
 
-    printf("HOLY SH*T HOW DID WE GET HERE");//-------------------------------------------------
+    printf("HOW DID WE GET HERE");//-------------------------------------------------
     /*for(int i=0; i<thread_num; i++)
     {
         free(thread_array[i]);
@@ -201,6 +204,7 @@ int main(int argc, char *argv[])
 
     list_destroy(input_queue);
 }
+
 
 
     

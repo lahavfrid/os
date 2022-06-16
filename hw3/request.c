@@ -31,16 +31,10 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
 
    // Write out the header information for this response
    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
 
-   sprintf(buf, "%sContent-Type: text/html\r\n");
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
+   sprintf(buf, "%sContent-Type: text/html\r\n", buf);
 
-   sprintf(buf, "%sContent-Length: %lu\r\n", strlen(body));
-   Rio_writen(fd, buf, strlen(buf));
-   printf("%s", buf);
+   sprintf(buf, "%sContent-Length: %lu\r\n", buf, strlen(body));
 
    sprintf(buf, "%sStat-Req-Arrival:: %lu.%06lu\r\n", buf, creation->tv_sec, creation->tv_usec);
 
@@ -143,15 +137,15 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, struct timeval* 
    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, stats_p->dynamic_requests);
 
    Rio_writen(fd, buf, strlen(buf));
-
-   if (Fork() == 0) {
+   pid_t son = Fork();
+   if (son == 0) {
       /* Child process */
       Setenv("QUERY_STRING", cgiargs, 1);
       /* When the CGI process writes to stdout, it will instead go to the socket */
       Dup2(fd, STDOUT_FILENO);
       Execve(filename, emptylist, environ);
    }
-   Wait(NULL);
+   WaitPid(son, NULL, 0);
 }
 
 

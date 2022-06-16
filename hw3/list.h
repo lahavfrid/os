@@ -21,6 +21,12 @@ typedef struct list_t
     Node tail;
 } *List;
 
+typedef struct args_t
+{
+    List input_queue;
+    int request_fds[100];
+} *Args;
+
 List list_init(int given_max_size)
 {
     List list = (List)malloc(sizeof(struct list_t));
